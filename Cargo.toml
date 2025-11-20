@@ -1,0 +1,15 @@
+[package]
+name = "hey"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+bitvec = "1.0.1"
+
+[[bin]]
+name = "hey"
+path = "src/main.rs"
+
+# [[bin]]
+# name = "hey-listen"
+# path = "src/listen.rs"
