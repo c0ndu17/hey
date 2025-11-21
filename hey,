@@ -1,1 +1,1 @@
-cargo run
+echo "hey," | cargo run

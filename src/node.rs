@@ -20,7 +20,7 @@
  **/
 use bitvec::prelude::*;
 use std::io::{self};
-use std::net::{SocketAddr, UdpSocket}; // <-- NEW
+use std::net::SocketAddr;
 
 pub const ROOT: &[u8] = b"hey";
 
@@ -41,7 +41,6 @@ pub enum BitVal {
     One,
 }
 
-/// A recursive binary structure:
 /// - Bit(Zero/One): terminal leaf
 /// - Compound(left, right): internal Node
 /// - A compound is : C = [[1, [...A]], [1, [1, ...B]]]
@@ -52,98 +51,25 @@ pub enum Node {
 }
 
 impl Node {
-    pub fn attach(&self) -> Result<(usize, UdpSocket), io::Error> {
-        let start_port = SIZE as usize;
-        let end_port = 65535;
-        let ttl = end_port - start_port;
-        let bits = Bits::from(self.clone());
-
-        let port = (bits.len() % ttl) + SIZE;
-
-        let socket = match UdpSocket::bind(format!("{}:{}", "0.0.0.0", port)) {
-            Ok(s) => s,
-            Err(e) => {
-                eprintln!("[UDP ERROR] Failed to bind to port {}: {}", port, e);
-                return Err(e);
-            }
-        };
-
-        socket.set_broadcast(true)?;
-        println!("[UDP] Bound UDP socket to port {}", port);
-        return Ok((port, socket));
-    }
-
-    pub fn next(&mut self, input: Node, listen: bool) -> Node {
-        // UDP socket for Reading/Writing.
-
-        let mut buf = [0u8; SIZE];
-
+    pub fn next(&mut self, input: Node) -> Result<Node, io::Error> {
         let node = match input {
-            Node::Bit(BitVal::Zero) | Node::Bit(BitVal::One) => {
-                Node::Compound(Box::new((self.to_owned(), input.to_owned())))
-            }
-            Node::Compound(_) => {
-                let mut v = Bits::new();
-
-                let self_bits: Bits = self.clone().into();
-                let input_bits: Bits = input.into();
-
-                // your one-bit-renormalisation step:
-                v.extend_from_bitslice(&self_bits[1..]);
-                v.extend_from_bitslice(&input_bits);
-
-                Node::from(v)
-            }
+            Node::Bit(bit) => &Node::Compound(Box::new((Node::Bit(bit), self.clone()))),
+            Node::Compound(_) => &Node::from(self.op(&input)),
         };
-
-        let (port, socket) = match self.attach() {
-            Ok(s) => s,
-            Err(e) => {
-                eprintln!("  [BROADCAST ERROR] Failed to bind socket: {}", e);
-                panic!("Cannot proceed without UDP socket.")
-            }
-        };
-
-        let self_bits: &Vec<u8> = &self.clone().into();
-        let addr = format!("0.0.0.0:{}", port);
-
-        match socket.send_to(&self_bits, &addr) {
-            Ok(_) => println!("  [SEND] To {}", addr),
-            Err(e) => eprintln!("  [SEND ERROR] Failed to send: {}", e),
-        }
-
-        println!("  [LISTEN] Waiting to receive on port {}", port);
-        if listen {
-            loop {
-                match socket.recv_from(&mut buf) {
-                    Ok((size, _socket)) => {
-                        println!("  [RECV] From {:?}: {} bytes", &buf[..size], size);
-                    }
-                    Err(e) => {
-                        eprintln!("  [RECV ERROR] Failed to receive: {}", e);
-                    }
-                };
-            }
-        }
-
-        node // [node, (socket)] ???
+        Ok(node.to_owned())
     }
 
     /// Perform a bitwise XOR between two Nodes.
-    pub fn op(&self, b: &Node) -> Node {
+    pub fn op(&self, other: &Node) -> Bits {
         let a_bits: Bits = self.clone().into();
-        let b_bits: Bits = b.clone().into();
+        let b_bits: Bits = other.clone().into();
 
-        let max_len = usize::max(a_bits.len(), b_bits.len());
-        let mut result_bits: Bits = BitVec::with_capacity(max_len);
-
-        for i in 0..max_len {
-            let a_bit = if i < a_bits.len() { a_bits[i] } else { false };
-            let b_bit = if i < b_bits.len() { b_bits[i] } else { false };
-            result_bits.push(a_bit ^ b_bit);
-        }
-
-        Node::from(result_bits)
+        a_bits
+            .iter()
+            .by_vals()
+            .zip(b_bits.iter().by_vals())
+            .map(|(a, b)| a ^ b)
+            .collect()
     }
 }
 
@@ -196,7 +122,9 @@ impl From<Bits> for Node {
         let mid = bv.len() / 2;
         let left = Node::from(bv[..mid].to_bitvec());
         let right = Node::from(bv[mid..].to_bitvec());
-        Node::Compound(Box::new((left, right)))
+
+        let node = Node::Compound(Box::new((left, right)));
+        node
     }
 }
 

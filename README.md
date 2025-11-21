@@ -1,88 +1,167 @@
 # hey,
 
-`hey,` is a rust based cli that connects users through a shared entropic data space, in which everything is represented as a recursive binary structure.
+**hey,** is a self-organising peer-to-peer system where  
+**identity, address, and communication all emerge from information itself.**
 
-[1, [(...)?, [1,(...)?]?]
+- There are no IDs.  
+- No configuration files.  
+- No fixed ports.  
+- No discovery service.  
+- No membership protocol.
 
-The starting POC of a shared entropic data space.
+Every node begins from the same initial bytes(`ROOT`, aka. 'hey').  
 
-The idea is after, `hey`, everything is within & projected through the shared data space. 
+From that shared seed, each node evolves an internal state — called a `Node` — by folding in everything it experiences:
 
-Instead of sending messages, each node in network evolves within the same bit-space.
+- whether it could bind to a port  
+- messages it receives  
+- data provided locally  
+- the identity projections of other peers  
 
-Updates are folded into a recursive binary structure whose growth naturally
-approaches the universal efficiency limit:
+This evolving `Node` structure is more than state:
 
-    e^(1/e) ≈ 1.4447
+**It *is* the node’s identity,  
+it *is* its history,  
+and it *determines* how the node behaves next.**
 
-This value is the optimal balance point for branching,
-information gain, and entropy-efficient decomposition.
+From this structure, each node deterministically derives:
 
-And so beginneth the symbol economy.
+- **its current network port**  
+- **its next fallback port** (if a bind fails)  
+- **how it interprets other nodes**  
+- **how it communicates**  
+- **how it participates in the mesh**
 
----
+Collisions become information.  
+Information becomes structure.  
+Structure becomes behaviour.
 
-## Core Aim
+Nodes don’t discover each other by asking “who is there?”  
+They discover each other because **their deterministic behaviours converge and diverge in predictable ways**.
 
-Transport of shared data frames, the result of repeated XOR, against e^(1/e).
+Over time, all nodes contribute to — and interpret — a shared symbolic dataspace:  
+a small but powerful **symbol economy** where meaning emerges from entropy and interaction.
 
-The reason being is to base a network, on clear thermodynamic principles, 
-- Using XOR, to split information over the network, into a client request, and server dispersal.
-- XOR should be able to ensure the thermodynamic completeness, of XOR operations.
+In one sentence:
 
-i.e. realtime entropic space through frequent UDP Packets, which reconstruct the space.
-
-Each update transforms the node by:
-
-```
-    # x^(1/x) -> x^(e/x^e)
-    next(state, input) => decode(encode(state) + encode(input))
-```
-Where:
-
-- `encode(Node)` = recursive bitstring (fractal, self-similar)
-- `decode(bits)` = re-factor into a balanced tree
-- the conceptual leading `1` ensures monotonic growth, and change.
-
-The bitstring always grows; the tree always re-balances.
-
----
-
-## Continuity
-
-Nodes do not address each other.
-
-Continuity between nodes A and B is simply:
-
-    Δ = encode(A) XOR encode(B)
-
-Small Δ = close in entropic space  
-Large Δ = diverged histories
-
-This creates an undirected, shared field of state rather than a message graph.
+> A network where everything — identity, topology, and communication — is derived from a single evolving number.
 
 ---
-
 ## Running
+To run **hey,**, you need to have [Rust](https://www.rust-lang.org/tools/install) installed.
 
+Then, clone the repository and run any of the following commands in your terminal:
+
+```
+    ./hey,
+    ./hey
+    echo "hey" | cargo run
     cargo run
-
-Then type input or pipe data:
-
 ```
-echo "hey" | cargo run
-```
-
-Each step prints:
-
-- the external hex bitstring  
-- the recursive structure  
-- the 0/1 leaf distribution (an entropy sketch)
-
----
 
 ## Idea in One Sentence
 
-A node’s identity is its position in a globally shared entropic space,
+A node’s identity is its position in a globally shared growing entropic space,
 and each update nudges it toward the natural optimal balance point
 of e^(1/e).
+
+
+## GPT-5.1 Summary of some math
+===
+
+
+## Extra: Internal Coordinate Mapping via f, g, and H
+
+This section outlines how atoms in the system are mapped into the bounded internal domain using the functions:
+
+- \( f(x) = x^{e/x^e} \)
+- \( g(x) = x^{e/x} \)
+- Shared map \( H(u) = u\, e^{1-u} \)
+
+### Properties of \(H\)
+
+- Domain: \(u > 0\)  
+- Bounded range with a single maximum at \(u = 1\)  
+- \(H(1) = 1\)  
+- \(H(u) \to 0\) as \(u \to 0^+\) or \(u \to +\infty\)
+
+This makes \(H\) a **single-peaked bounded map**, suitable as an entropic potential.
+
+---
+
+### 3.1 Atom → Internal Coordinate via \(f, g, H\)
+
+Each atom \(c\) is first mapped to a positive real code:
+
+\[
+x(c) \in \mathbb{R}^+
+\]
+
+Define two views:
+
+**Internal view via \(f\):**
+\[
+u_{\text{int}}(c) = f(x(c)) = x(c)^{e/x(c)^e}
+\]
+
+**External-ish view via \(g\):**
+\[
+u_{\text{ext}}(c) = g(x(c)) = x(c)^{e/x(c)}
+\]
+
+Map both through the shared map \(H\):
+
+\[
+d_{\text{int}}(c) = H(u_{\text{int}}(c)), \qquad 
+d_{\text{ext}}(c) = H(u_{\text{ext}}(c))
+\]
+
+Use:
+
+- \( d_{\text{int}}(c) \) as the **canonical embedding** \( \psi(c) \in D \)
+- \( d_{\text{ext}}(c) \) as a **shadow coordinate** related to reconstruction behavior  
+  (e.g. measuring how many external forms map to this internal representation)
+
+Define an entropic weight for each atom:
+
+\[
+w(c) = -\log H(u_{\text{ext}}(c))
+\]
+
+These weights contribute to the entropic accounting during aggregation.
+
+---
+
+### 3.2 Internal Superposition via \(H\)-Weighted Aggregation
+
+Given atoms \(c_1, \ldots, c_k\), let:
+
+- \( d_i = \psi(c_i) = d_{\text{int}}(c_i) \)  
+- \( w_i = w(c_i) \)
+
+Define the superposition operator:
+
+\[
+d_x = \frac{\sum_i d_i \, e^{-w_i}}{\sum_i e^{-w_i}}
+\]
+
+This yields:
+
+- \( d_x \in D \), a **weighted barycenter** in the bounded domain  
+- Heavier (more entropically significant) atoms influence the coordinate more strongly
+
+Store:
+
+- \( d_x \) as the **primary internal address** of the composed object
+- The decomposition structure and weights in state \(S\), enabling reconstruction and sharing
+
+**Deduplication rule:**  
+If objects \(x\) and \(y\) contain the **same multiset of atoms** (up to multiplicity), the system produces:
+
+\[
+d_x = d_y
+\]
+
+This gives deterministic, number-theoretic deduplication.
+
+---
