@@ -3,6 +3,8 @@
 **hey,** is a self-organising peer-to-peer system where  
 **identity, address, and communication all emerge from information itself.**
 
+TLDR; The Internet 2: Electron Bugaloo 
+
 - There are no IDs.  
 - No configuration files.  
 - No fixed ports.  
@@ -24,10 +26,27 @@ This evolving `Node` structure is more than state:
 it *is* its history,  
 and it *determines* how the node behaves next.**
 
+A `Node` is either:
+
+- a single bit:        0   or   1
+- a pair of Nodes:     (Node, Node)
+
+So, structurally:
+
+    Node ::= Bit(0 | 1)
+          |  Compound( Node , Node )
+
+Visually:
+
+          Compound
+          /      \
+       Node      Node
+
+
 From this structure, each node deterministically derives:
 
 - **its current network port**  
-- **its next fallback port** (if a bind fails)  
+- **its next address** (inc. bind attempt outcome)  
 - **how it interprets other nodes**  
 - **how it communicates**  
 - **how it participates in the mesh**
@@ -61,7 +80,7 @@ Then, clone the repository and run any of the following commands in your termina
 
 ## Idea in One Sentence
 
-A node’s identity is its position in a globally shared growing entropic space,
+A node’s identity is its value in a globally shared growing entropic space,
 and each update nudges it toward the natural optimal balance point
 of e^(1/e).
 

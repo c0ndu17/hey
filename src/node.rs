@@ -19,8 +19,9 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  **/
 use bitvec::prelude::*;
-use std::io::{self};
 use std::net::SocketAddr;
+
+use crate::entropy::UniversalEntropy;
 
 pub const ROOT: &[u8] = b"hey";
 
@@ -40,6 +41,14 @@ pub enum BitVal {
     Zero,
     One,
 }
+impl BitVal {
+    pub fn to_bool(&self) -> bool {
+        match self {
+            BitVal::Zero => false,
+            BitVal::One => true,
+        }
+    }
+}
 
 /// - Bit(Zero/One): terminal leaf
 /// - Compound(left, right): internal Node
@@ -50,13 +59,45 @@ pub enum Node {
     Bit(BitVal),
 }
 
+// consider wrapping this expression in `std::sync::LazyLock::new(|| ...)` (rustc E0015)
 impl Node {
-    pub fn next(&mut self, input: Node) -> Result<Node, io::Error> {
-        let node = match input {
-            Node::Bit(bit) => &Node::Compound(Box::new((Node::Bit(bit), self.clone()))),
-            Node::Compound(_) => &Node::from(self.op(&input)),
+    pub fn bit(&self, entropy: &mut UniversalEntropy, pos: usize) -> BitVal {
+        let src = entropy.bit(pos);
+        if src {
+            BitVal::One
+        } else {
+            BitVal::Zero
+        }
+    }
+
+    // pub fn value(&self) -> Bits {
+    //     let mut bits: Bits = BitVec::new();
+    //     match self {
+    //         Node::Bit(bit) => {
+    //             bits.insert(0, matches!(bit, BitVal::One));
+    //         }
+    //         Node::Compound(compound) => {
+    //             let (left, right) = compound.as_ref();
+    //             bits.extend_from_bitslice(&left.value());
+    //             bits.extend_from_bitslice(&right.value());
+    //         }
+    //     };
+    //     bits
+    // }
+
+    pub fn next<'input>(&mut self, entropy: &mut UniversalEntropy, input: &'input Node) -> Node {
+        let branch = self.op(&input).into();
+        let node = match branch {
+            Node::Bit(bit) => Node::Compound(Box::new((Node::Bit(bit), branch))),
+            Node::Compound(compound) => {
+                let (left, right) = *compound;
+                Node::Compound(Box::new((
+                    left.clone().next(entropy, &input),
+                    right.clone().next(entropy, &input),
+                )))
+            }
         };
-        Ok(node.to_owned())
+        node
     }
 
     /// Perform a bitwise XOR between two Nodes.
@@ -73,6 +114,22 @@ impl Node {
     }
 }
 
+impl Into<BitVal> for Node {
+    fn into(self) -> BitVal {
+        // let mut entropy = &mut UniversalEntropy::new();
+        match self {
+            Node::Bit(_) => self.into(),
+            Node::Compound(compound) => {
+                let (left, right) = *compound;
+                left.op(&right)
+                    .iter()
+                    .by_vals()
+                    .fold(BitVal::Zero, |acc, b| if b { BitVal::One } else { acc })
+            }
+        }
+    }
+}
+
 /// Flatten leaf or compound node into bytes.
 impl From<Node> for Vec<u8> {
     fn from(n: Node) -> Self {
@@ -85,6 +142,24 @@ impl From<Node> for Vec<u8> {
                 bits.extend_from_bitslice(&Bits::from(l));
                 bits.extend_from_bitslice(&Bits::from(r));
                 bits.into()
+            }
+        }
+    }
+}
+
+impl From<&Node> for Bits {
+    fn from(n: &Node) -> Self {
+        match n {
+            Node::Bit(BitVal::Zero) => BitVec::from_slice(ZERO_BLOCK),
+            Node::Bit(BitVal::One) => BitVec::from_slice(ONE_BLOCK),
+            Node::Compound(value) => {
+                let (left, right) = value.as_ref();
+                let mut out = Bits::new();
+                let left_bits: Bits = Bits::from(left);
+                let right_bits: Bits = Bits::from(right);
+                out.extend_from_bitslice(&left_bits.to_owned());
+                out.extend_from_bitslice(&right_bits.to_owned());
+                out
             }
         }
     }
