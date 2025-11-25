@@ -1,9 +1,10 @@
 # hey,
 
 **hey,** is a self-organising peer-to-peer system where  
-**identity, address, and communication all emerge from information itself.**
+**Communication, using a stream of emergent identity.**
 
 TLDR; The Internet 2: Electron Bugaloo 
+    - Digital identity is fluid, where your interactions becomes the entropy that sculpts your identity.
 
 - There are no IDs.  
 - No configuration files.  
@@ -11,7 +12,8 @@ TLDR; The Internet 2: Electron Bugaloo
 - No discovery service.  
 - No membership protocol.
 
-Every node begins from the same initial bytes(`ROOT`, aka. 'hey').  
+node begins from the same initial bytes(`ROOT`, aka. 'hey'). This enables the entropical introduction algorithm.
+- In general, a systems entropy should be used and projected for entropy feedback
 
 From that shared seed, each node evolves an internal state — called a `Node` — by folding in everything it experiences:
 
@@ -63,7 +65,7 @@ a small but powerful **symbol economy** where meaning emerges from entropy and i
 
 In one sentence:
 
-> A network where everything — identity, topology, and communication — is derived from a single evolving number.
+> A network where everything — identity, topology, and communication — is reducible to an entropically shareable & decodable nodes/values.
 
 ---
 ## Running
@@ -75,7 +77,7 @@ Then, clone the repository and run any of the following commands in your termina
     ./hey,
     ./hey
     echo "hey" | cargo run
-    cargo run
+    cargo run --release
 ```
 
 ## Idea in One Sentence

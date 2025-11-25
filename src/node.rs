@@ -35,96 +35,87 @@ const ONE_BLOCK: &[u8] = &[0xFFu8; 1];
 /// Bit-level buffer type used throughout.
 pub type Bits = BitVec<u8, Msb0>;
 
-/// Consider it the only network literal.
-#[derive(Debug, Clone, Copy)]
-pub enum BitVal {
-    Zero,
-    One,
-}
-impl BitVal {
-    pub fn to_bool(&self) -> bool {
-        match self {
-            BitVal::Zero => false,
-            BitVal::One => true,
-        }
-    }
-}
-
 /// - Bit(Zero/One): terminal leaf
 /// - Compound(left, right): internal Node
 /// - A compound is : C = [[1, [...A]], [1, [1, ...B]]]
 #[derive(Debug, Clone)]
 pub enum Node {
     Compound(Box<(Node, Node)>),
-    Bit(BitVal),
+    Bit(bool),
 }
 
-// consider wrapping this expression in `std::sync::LazyLock::new(|| ...)` (rustc E0015)
 impl Node {
-    pub fn bit(&self, entropy: &mut UniversalEntropy, pos: usize) -> BitVal {
-        let src = entropy.bit(pos);
-        if src {
-            BitVal::One
-        } else {
-            BitVal::Zero
-        }
+    pub fn fold(&self, entropy: &mut UniversalEntropy, pos: usize) -> bool {
+        let expected = entropy.bit(pos);
+        let bit = match self {
+            Node::Bit(b) => *b,
+            Node::Compound(compound) => {
+                let (left, right) = compound.as_ref();
+                let left_bit = left.fold(entropy, pos);
+                let right_bit = right.fold(entropy, pos);
+                left_bit ^ right_bit
+            }
+        };
+        bit ^ expected
     }
 
-    // pub fn value(&self) -> Bits {
-    //     let mut bits: Bits = BitVec::new();
-    //     match self {
-    //         Node::Bit(bit) => {
-    //             bits.insert(0, matches!(bit, BitVal::One));
-    //         }
-    //         Node::Compound(compound) => {
-    //             let (left, right) = compound.as_ref();
-    //             bits.extend_from_bitslice(&left.value());
-    //             bits.extend_from_bitslice(&right.value());
-    //         }
-    //     };
-    //     bits
-    // }
-
-    pub fn next<'input>(&mut self, entropy: &mut UniversalEntropy, input: &'input Node) -> Node {
-        let branch = self.op(&input).into();
+    pub fn reflect<'input>(&mut self, entropy: &mut UniversalEntropy, input: &'input Node) -> Node {
+        // let branch = Node::Compound::(self, input);
+        let branch = self.op(entropy, input).into();
         let node = match branch {
-            Node::Bit(bit) => Node::Compound(Box::new((Node::Bit(bit), branch))),
+            Node::Bit(bit) => Node::Compound(Box::new((Node::Bit(bit), branch.into()))),
             Node::Compound(compound) => {
                 let (left, right) = *compound;
-                Node::Compound(Box::new((
-                    left.clone().next(entropy, &input),
-                    right.clone().next(entropy, &input),
-                )))
+                Node::Compound(Box::new((left.into(), right.into())))
             }
         };
         node
     }
 
-    /// Perform a bitwise XOR between two Nodes.
-    pub fn op(&self, other: &Node) -> Bits {
-        let a_bits: Bits = self.clone().into();
-        let b_bits: Bits = other.clone().into();
+    // pub fn op(&self, entropy: &mut UniversalEntropy, other: &Node) -> Bits {
+    //     // let size = self.size().max(other.size());
 
-        a_bits
-            .iter()
-            .by_vals()
-            .zip(b_bits.iter().by_vals())
-            .map(|(a, b)| a ^ b)
-            .collect()
+    //     let mut result = Node::from(Box::new((self.clone(), other.clone())));
+
+    //     result
+    // }
+    /// Perform a three-way XOR between two Nodes & their expected entropical value.
+    pub fn op(&self, entropy: &mut UniversalEntropy, other: &Node) -> Bits {
+        let size = self.size().max(other.size());
+        let mut result: Bits = BitVec::with_capacity(size);
+
+        for pos in 0..size {
+            let a_bit = self.fold(entropy, pos);
+            let b_bit = other.fold(entropy, pos);
+            let expected = entropy.bit(pos);
+            let res_bit = a_bit ^ b_bit ^ expected;
+            result.push(res_bit);
+        }
+
+        result
+    }
+
+    pub fn size(&self) -> usize {
+        match self {
+            Node::Bit(_) => 1,
+            Node::Compound(compound) => {
+                let (left, right) = compound.as_ref();
+                left.size() + right.size()
+            }
+        }
     }
 }
 
-impl Into<BitVal> for Node {
-    fn into(self) -> BitVal {
-        // let mut entropy = &mut UniversalEntropy::new();
+impl Into<bool> for Node {
+    fn into(self) -> bool {
+        let entropy = &mut UniversalEntropy::new();
         match self {
             Node::Bit(_) => self.into(),
             Node::Compound(compound) => {
                 let (left, right) = *compound;
-                left.op(&right)
-                    .iter()
-                    .by_vals()
-                    .fold(BitVal::Zero, |acc, b| if b { BitVal::One } else { acc })
+                let left_bit: bool = left.into();
+                let right_bit: bool = right.into();
+                left_bit ^ right_bit ^ entropy.bit(0)
             }
         }
     }
@@ -134,8 +125,8 @@ impl Into<BitVal> for Node {
 impl From<Node> for Vec<u8> {
     fn from(n: Node) -> Self {
         match n {
-            Node::Bit(BitVal::Zero) => ZERO_BLOCK.to_vec(),
-            Node::Bit(BitVal::One) => ONE_BLOCK.to_vec(),
+            Node::Bit(false) => ZERO_BLOCK.to_vec(),
+            Node::Bit(true) => ONE_BLOCK.to_vec(),
             Node::Compound(pair) => {
                 let (l, r) = *pair;
                 let mut bits: Bits = BitVec::new();
@@ -150,8 +141,8 @@ impl From<Node> for Vec<u8> {
 impl From<&Node> for Bits {
     fn from(n: &Node) -> Self {
         match n {
-            Node::Bit(BitVal::Zero) => BitVec::from_slice(ZERO_BLOCK),
-            Node::Bit(BitVal::One) => BitVec::from_slice(ONE_BLOCK),
+            Node::Bit(false) => BitVec::from_slice(ZERO_BLOCK),
+            Node::Bit(true) => BitVec::from_slice(ONE_BLOCK),
             Node::Compound(value) => {
                 let (left, right) = value.as_ref();
                 let mut out = Bits::new();
@@ -187,11 +178,7 @@ impl From<Bits> for Node {
         if bv.len() <= LEAF_THRESHOLD {
             let ones = bv.iter().by_vals().filter(|b| *b).count();
             let zeros = bv.len() - ones;
-            return Node::Bit(if ones >= zeros {
-                BitVal::One
-            } else {
-                BitVal::Zero
-            });
+            return Node::Bit(if ones >= zeros { true } else { false });
         }
 
         let mid = bv.len() / 2;
@@ -207,8 +194,8 @@ impl From<Bits> for Node {
 impl From<Node> for Bits {
     fn from(n: Node) -> Self {
         match n {
-            Node::Bit(BitVal::Zero) => BitVec::from_slice(ZERO_BLOCK),
-            Node::Bit(BitVal::One) => BitVec::from_slice(ONE_BLOCK),
+            Node::Bit(false) => BitVec::from_slice(ZERO_BLOCK),
+            Node::Bit(true) => BitVec::from_slice(ONE_BLOCK),
             Node::Compound(pair) => {
                 let (l, r) = *pair;
                 let mut out = Bits::new();

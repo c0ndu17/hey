@@ -8,11 +8,11 @@ use crate::node::Node; // adjust to your actual module path
 
 /// Simple append-only log of Node frames.
 /// File layout: [u32 len][len bytes of Node][u32 len][len bytes]...
-pub struct FrameStore {
+pub struct Store {
     file: File,
 }
 
-impl FrameStore {
+impl Store {
     /// Open (or create) the log file.
     pub fn open<P: AsRef<Path>>(path: P) -> io::Result<Self> {
         let file = OpenOptions::new()
@@ -35,6 +35,7 @@ impl FrameStore {
 
         // Write length prefix (big-endian).
         self.file.write_all(&len.to_be_bytes())?;
+
         // Then write the raw bytes.
         self.file.write_all(&bytes)?;
 

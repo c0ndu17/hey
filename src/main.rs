@@ -20,11 +20,12 @@ use std::{
 };
 
 mod entropy;
-mod frame;
 mod node;
-use node::{BitVal, Bits, Node, ROOT, SIZE};
+mod store;
 
-use crate::{entropy::UniversalEntropy, frame::FrameStore};
+use node::{Bits, Node, ROOT, SIZE};
+
+use crate::{entropy::UniversalEntropy, store::Store};
 
 /// Map a Node to a UDP port.
 pub fn to_port(node: &Node) -> u16 {
@@ -64,8 +65,6 @@ fn begin(mut socket: UdpSocket, port: u16, node: &mut Node) -> io::Result<()> {
         "[MESH] Bound successfully on port {} with node state: {:?}",
         port, node
     );
-
-    let mut entropy = UniversalEntropy::new();
 
     socket.set_nonblocking(true)?;
 
@@ -129,7 +128,7 @@ fn begin(mut socket: UdpSocket, port: u16, node: &mut Node) -> io::Result<()> {
             Ok((n, src)) => {
                 // hey, is our explicit handshake ack
                 let result = &buf[..n];
-                if n == 5 && result == b"hey," {
+                if n == 5 && result == ROOT {
                     println!("[HANDSHAKE] Received {} from {}", result.len(), src);
                     if peers.insert(src) {
                         println!("[HANDSHAKE] Added new peer {}", src);
@@ -152,14 +151,14 @@ fn begin(mut socket: UdpSocket, port: u16, node: &mut Node) -> io::Result<()> {
                 // Fold payload into Node state (optional, but matches your model).
                 let payload = Node::from(BitVec::from_slice(&buf[..n]));
 
-                *node = node.next(&mut entropy, &payload);
+                *node = node.reflect(&mut entropy, &payload);
                 println!("[MESH] Updated node state from peer: {:?}", node);
 
                 // If we are the ROOT node and this looks like an announcement,
                 // respond with HELLO so the sender learns us as a peer.
                 if port == root_port {
-                    println!("[HANDSHAKE] (ROOT) Sending HELLO to {}", src);
-                    let _ = socket.send_to(b"HELLO", src)?;
+                    println!("[MSG] {} {}", src, String::from_utf8_lossy(&ROOT));
+                    let _ = socket.send_to(ROOT, src)?;
                 }
             }
             Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
@@ -183,7 +182,7 @@ fn begin(mut socket: UdpSocket, port: u16, node: &mut Node) -> io::Result<()> {
                 // Fold stdin bytes into the evolving entropical state.
                 let input_bits: Bits = BitVec::from_slice(&data);
                 let input_node: Node = Node::from(input_bits);
-                *node = node.next(&mut entropy, &input_node);
+                *node = node.reflect(&mut entropy, &input_node);
                 println!("[MESH] Updated node state from stdin: {:?}", node);
 
                 if peers.is_empty() {
@@ -216,7 +215,7 @@ fn main() -> io::Result<()> {
 
     let mut entropy = UniversalEntropy::new();
 
-    let mut frames = FrameStore::open("state")?;
+    let mut frames = Store::open("state")?;
 
     // Initial entropical state from ROOT.
     let mut node = Node::from(BitVec::from_slice(&ROOT));
@@ -233,13 +232,13 @@ fn main() -> io::Result<()> {
             }
             Err(ref e) if e.kind() == io::ErrorKind::AddrInUse => {
                 println!("[MESH] Port in use – encoding failure bit and hopping…");
-                let bit = Node::Bit(BitVal::One);
-                node = node.next(&mut entropy, &bit);
+                let bit = Node::Bit(true);
+                node = node.reflect(&mut entropy, &bit);
             }
             Err(e) => {
                 // Any other error: also evolve and keep going.
                 eprintln!("[MESH ERROR] {}", e);
-                node = node.next(&mut entropy, &Node::Bit(BitVal::Zero));
+                node = node.reflect(&mut entropy, &Node::Bit(false));
             }
         }
     }
