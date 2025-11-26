@@ -1,4 +1,4 @@
-# hey,
+# hey [The Symbol For The Artist At One Point, Formerly Known as Prince],
 
 **hey,** is a self-organising peer-to-peer system where  
 **Communication, using a stream of emergent identity.**
